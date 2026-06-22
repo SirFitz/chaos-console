@@ -1,0 +1,20 @@
+{
+  "name": "chaos-console",
+  "private": true,
+  "packageManager": "pnpm@9.7.0",
+  "engines": { "node": ">=20" },
+  "scripts": {
+    "build": "pnpm -r build",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "lint": "eslint . --ext .ts,.tsx",
+    "format": "prettier --write .",
+    "dev": "pnpm --filter @chaos/server dev"
+  },
+  "devDependencies": {
+    "typescript": "^5.5.4", "vitest": "^2.0.5", "aws-sdk-client-mock": "^4.0.1",
+    "aws-sdk-client-mock-vitest": "^4.0.0", "eslint": "^8.57.0",
+    "@typescript-eslint/parser": "^7.18.0", "@typescript-eslint/eslint-plugin": "^7.18.0",
+    "prettier": "^3.3.3", "tsx": "^4.16.5", "@types/node": "^20.14.0"
+  }
+}

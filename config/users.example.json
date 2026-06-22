@@ -1,0 +1,4 @@
+[
+  { "username": "viewer", "passwordHash": "REPLACE_WITH_BCRYPT_HASH", "role": "viewer" },
+  { "username": "operator", "passwordHash": "REPLACE_WITH_BCRYPT_HASH", "role": "operator" }
+]

@@ -1,0 +1,28 @@
+[
+  {
+    "id": "mi",
+    "layer": "MI",
+    "kind": "ecs",
+    "region": "us-east-1",
+    "creds": { "mode": "assumeRole", "roleArn": "arn:aws:iam::<ACCOUNT_ID>:role/<YOUR_CONSOLE_ECS_ROLE>", "externalId": "<OPTIONAL_EXTERNAL_ID>" },
+    "identifiers": { "cluster": "<YOUR_ECS_CLUSTER_NAME>" },
+    "restore": 1,
+    "naclRule": 1
+  },
+  {
+    "id": "api",
+    "layer": "API",
+    "kind": "eks_ssm",
+    "region": "us-east-1",
+    "creds": { "mode": "assumeRole", "roleArn": "arn:aws:iam::<ACCOUNT_ID>:role/<YOUR_CONSOLE_EKS_ROLE>" },
+    "identifiers": {
+      "managerInstance": "<EC2_INSTANCE_ID_RUNNING_KUBECTL_VIA_SSM>",
+      "namespace": "<KUBERNETES_NAMESPACE>",
+      "asg": "<EKS_WORKER_ASG_NAME>",
+      "asgRestoreCap": 2
+    },
+    "restore": 2,
+    "chaosBackend": "pumba",
+    "chaosLabel": "app"
+  }
+]

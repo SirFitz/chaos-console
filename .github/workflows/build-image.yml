@@ -1,0 +1,149 @@
+name: build-image
+
+# Builds + publishes the Chaos Console production image (infra/Dockerfile).
+#
+# Triggers:
+#   - tag  v1.2.3  -> build multi-arch, push a semver-tagged image (a release).
+#   - push to main -> build multi-arch, push :latest + a sha tag (rolling DEV).
+#   - manual       -> workflow_dispatch.
+#
+# Registries (each job runs only if its registry is configured):
+#   - GHCR   (default) — built-in GITHUB_TOKEN, no extra secrets.
+#   - Nexus  (Sonatype Docker hosted repo) — set repo VARIABLE NEXUS_REGISTRY
+#            (host:port) + NEXUS_IMAGE, and secrets NEXUS_USERNAME / NEXUS_PASSWORD.
+#   - ECR    — set repo VARIABLE ECR_REPOSITORY + AWS_DEPLOY_ROLE_ARN (OIDC, no keys).
+#
+# The image needs config + creds at RUNTIME (see infra/DEVOPS-IMAGE.md):
+#   mount /config (users.json + platforms.json + catalog.json), set
+#   CHAOS_JWT_SECRET, and provide AWS creds via the task role / IRSA / profile.
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*.*.*"]
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+  packages: write # GHCR push
+  id-token: write # AWS OIDC (only used by push-ecr)
+
+jobs:
+  test:
+    name: test + lint + build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with: { version: 9.7.0 }
+      - uses: actions/setup-node@v4
+        with: { node-version: 20, cache: pnpm }
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm test
+      - run: pnpm lint
+      - run: pnpm -r build
+
+  image-ghcr:
+    name: build + push (GHCR)
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository }}
+          tags: |
+            type=semver,pattern={{version}}
+            type=sha,format=short
+            type=raw,value=latest,enable={{is_default_branch}}
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: infra/Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  # Sonatype Nexus Docker (hosted) repo. Runs only when the repo VARIABLE
+  # NEXUS_REGISTRY is set — the Docker connector "host:port" (e.g. nexus.corp:8083).
+  # Also set repo variable NEXUS_IMAGE (default chaos-console) and the secrets
+  # NEXUS_USERNAME / NEXUS_PASSWORD (a Nexus account with push to that repo).
+  image-nexus:
+    name: build + push (Nexus)
+    needs: test
+    if: ${{ vars.NEXUS_REGISTRY != '' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ${{ vars.NEXUS_REGISTRY }}
+          username: ${{ secrets.NEXUS_USERNAME }}
+          password: ${{ secrets.NEXUS_PASSWORD }}
+      - id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ vars.NEXUS_REGISTRY }}/${{ vars.NEXUS_IMAGE || 'chaos-console' }}
+          tags: |
+            type=semver,pattern={{version}}
+            type=sha,format=short
+            type=raw,value=latest,enable={{is_default_branch}}
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: infra/Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: true
+          provenance: false # some Nexus Docker repos reject buildx OCI attestation manifests
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  # Optional: push to AWS ECR. Runs only when the repo variable ECR_REPOSITORY is set.
+  image-ecr:
+    name: build + push (ECR)
+    needs: test
+    if: ${{ vars.ECR_REPOSITORY != '' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION || 'us-east-1' }}
+      - id: ecr
+        uses: aws-actions/amazon-ecr-login@v2
+      - id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ steps.ecr.outputs.registry }}/${{ vars.ECR_REPOSITORY }}
+          tags: |
+            type=semver,pattern={{version}}
+            type=sha,format=short
+            type=raw,value=latest,enable={{is_default_branch}}
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: infra/Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

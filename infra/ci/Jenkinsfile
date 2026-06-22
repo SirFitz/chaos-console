@@ -1,0 +1,57 @@
+// Chaos Console — Jenkins (declarative) pipeline
+// Test/lint/build gate, then a multi-arch (amd64+arm64) image from infra/Dockerfile
+// pushed to a Sonatype Nexus Docker (hosted) repo.
+//
+// Job setup:
+//   - Multibranch / Pipeline job, "Script Path" = infra/ci/Jenkinsfile.
+//   - A username/password credential with id "nexus-docker" (Nexus push account).
+//   - Set NEXUS_REGISTRY (host:port, e.g. nexus.corp:8083) and NEXUS_IMAGE as job
+//     parameters or global env. The "image" stage needs an agent with Docker + buildx.
+
+pipeline {
+  agent none
+  options { timestamps() }
+  environment {
+    NEXUS_REGISTRY = "${env.NEXUS_REGISTRY ?: 'nexus.corp:8083'}"
+    NEXUS_IMAGE    = "${env.NEXUS_IMAGE ?: 'chaos-console'}"
+  }
+  stages {
+    stage('verify') {
+      agent { docker { image 'node:20-slim' } }
+      steps {
+        sh '''
+          corepack enable && corepack prepare pnpm@9.7.0 --activate
+          pnpm install --frozen-lockfile
+          pnpm test
+          pnpm lint
+          pnpm -r build
+        '''
+      }
+    }
+    stage('image') {
+      agent any                       // must have Docker + buildx available
+      when { anyOf { buildingTag(); branch 'main' } }
+      steps {
+        sh 'docker run --privileged --rm tonistiigi/binfmt --install all'   // QEMU for arm64
+        sh 'docker buildx create --use || true'
+        withCredentials([usernamePassword(credentialsId: 'nexus-docker',
+                         usernameVariable: 'NEXUS_USERNAME', passwordVariable: 'NEXUS_PASSWORD')]) {
+          script {
+            def tag = env.TAG_NAME ?: 'latest'
+            def sha = (env.GIT_COMMIT ?: 'dev').take(8)
+            sh """
+              echo "\$NEXUS_PASSWORD" | docker login "${NEXUS_REGISTRY}" -u "\$NEXUS_USERNAME" --password-stdin
+              docker buildx build \
+                --platform linux/amd64,linux/arm64 \
+                --file infra/Dockerfile \
+                --provenance=false \
+                --tag "${NEXUS_REGISTRY}/${NEXUS_IMAGE}:${tag}" \
+                --tag "${NEXUS_REGISTRY}/${NEXUS_IMAGE}:${sha}" \
+                --push .
+            """
+          }
+        }
+      }
+    }
+  }
+}

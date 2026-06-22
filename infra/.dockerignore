@@ -1,0 +1,44 @@
+# Build context is the repo root (see `docker build -f infra/Dockerfile .`).
+# Never ship host artifacts, secrets, or VCS metadata into the image.
+
+# Dependencies / build outputs (re-created inside the image)
+**/node_modules
+**/dist
+**/build
+**/coverage
+**/*.tsbuildinfo
+.pnpm-store
+
+# Secrets & local runtime state — MUST NOT enter the image
+**/.env
+**/.env.*
+!**/.env.example
+config/users.json
+# Environment-specific config is mounted at runtime, never baked.
+config/platforms*.json
+!config/platforms.example.json
+config/catalog*.json
+!config/catalog.example.json
+**/*.local.json
+**/*.sqlite
+**/*.sqlite3
+**/*.db
+.aws
+**/.aws
+
+# Terraform / IaC state (not part of the app image)
+**/.terraform
+**/*.tfstate
+**/*.tfstate.*
+**/*.tfvars
+
+# VCS / OS / editor noise
+.git
+.gitignore
+**/.DS_Store
+.idea
+.vscode
+
+# Docs are not part of the app image
+docs
+**/*.md

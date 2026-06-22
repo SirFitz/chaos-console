@@ -1,0 +1,11 @@
+{
+  "groups": {
+    "MI": {
+      "<flow-or-group-label>": ["<ecs-service-name>", "<another-service-name>"]
+    },
+    "API": {
+      "<flow-or-group-label>": ["<eks-deployment-name>"]
+    }
+  },
+  "flows": {}
+}

@@ -1,0 +1,10 @@
+{ "name": "@chaos/server", "version": "0.0.0", "type": "module", "main": "dist/index.js",
+  "scripts": { "build": "tsc -p tsconfig.json", "dev": "tsx watch src/index.ts" },
+  "dependencies": { "@chaos/shared": "workspace:*", "@chaos/engine": "workspace:*",
+    "fastify": "^4.28.1", "@fastify/cookie": "^9.3.1", "@fastify/static": "^7.0.4",
+    "jsonwebtoken": "^9.0.2", "bcryptjs": "^2.4.3",
+    "better-sqlite3": "^11.3.0" },
+  "devDependencies": { "@types/jsonwebtoken": "^9.0.6", "@types/bcryptjs": "^2.4.6",
+    "@types/better-sqlite3": "^7.6.11",
+    "@aws-sdk/client-ecs": "^3.620.0", "@aws-sdk/client-ssm": "^3.620.0",
+    "@aws-sdk/client-ec2": "^3.620.0", "aws-sdk-client-mock": "^4.0.1" } }

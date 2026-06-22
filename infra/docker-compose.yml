@@ -1,0 +1,37 @@
+# Chaos Console — local run (DEV, profile credential mode).
+# Usage (from repo root):
+#   CHAOS_JWT_SECRET=$(openssl rand -hex 32) docker compose -f infra/docker-compose.yml up --build
+# Credentials: your existing ~/.aws is mounted READ-ONLY; your platforms config uses
+# creds.mode "profile" (e.g. aws-profile-a / aws-profile-b). NO static keys in this file.
+services:
+  console:
+    build:
+      context: ..
+      dockerfile: infra/Dockerfile
+    image: chaos-console:dev
+    ports:
+      - "8080:8080"
+    environment:
+      PORT: "8080"
+      CHAOS_CONFIG_DIR: /config
+      CHAOS_AUDIT_DB: /data/chaos-audit.sqlite
+      # Set a strong secret in your shell before `up`; "dev" is only a fallback.
+      CHAOS_JWT_SECRET: "${CHAOS_JWT_SECRET:-dev}"
+      # The SDK resolves the profile named in your platforms config from the mounted ~/.aws.
+      AWS_SDK_LOAD_CONFIG: "1"
+      AWS_REGION: "${AWS_REGION:-us-east-1}"
+    volumes:
+      # App config (platforms/catalog/users) — provide ./config/users.json locally.
+      - ../config:/config:ro
+      # Existing AWS profiles, READ-ONLY (profile credential mode; no keys in-image).
+      - ${HOME}/.aws:/home/chaos/.aws:ro
+      # Persist the append-only audit DB across runs.
+      - chaos_audit:/data
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8080/healthz"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 15s
+volumes:
+  chaos_audit:

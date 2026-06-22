@@ -1,0 +1,59 @@
+# Chaos Console — Azure DevOps pipeline
+# Test/lint/build gate, then a multi-arch (amd64+arm64) image from infra/Dockerfile
+# pushed to a Sonatype Nexus Docker (hosted) repo.
+#
+# When creating the pipeline, set "YAML path" = infra/ci/azure-pipelines.yml.
+#
+# Set pipeline variables (Edit > Variables, or a variable group):
+#   NEXUS_REGISTRY  Nexus Docker connector host:port, e.g. nexus.corp:8083
+#   NEXUS_IMAGE     image path, e.g. chaos-console
+#   NEXUS_USERNAME  Nexus account with push rights
+#   NEXUS_PASSWORD  mark as SECRET (it is mapped to env explicitly in the push step)
+
+trigger:
+  branches:
+    include: [main]
+  tags:
+    include: ["v*"]
+
+pool:
+  vmImage: ubuntu-latest
+
+stages:
+  - stage: verify
+    jobs:
+      - job: verify
+        steps:
+          - task: NodeTool@0
+            inputs:
+              versionSpec: "20.x"
+          - script: corepack enable && corepack prepare pnpm@9.7.0 --activate
+            displayName: enable pnpm
+          - script: pnpm install --frozen-lockfile && pnpm test && pnpm lint && pnpm -r build
+            displayName: test + lint + build
+
+  - stage: image
+    dependsOn: verify
+    jobs:
+      - job: image
+        steps:
+          - script: docker run --privileged --rm tonistiigi/binfmt --install all
+            displayName: register QEMU (arm64)
+          - script: docker buildx create --use
+            displayName: buildx builder
+          # NEXUS_PASSWORD is a secret -> must be mapped into env explicitly.
+          - script: |
+              set -euo pipefail
+              echo "$NEXUS_PASSWORD" | docker login "$(NEXUS_REGISTRY)" -u "$(NEXUS_USERNAME)" --password-stdin
+              IMAGE="$(NEXUS_REGISTRY)/$(NEXUS_IMAGE)"
+              if [[ "$(Build.SourceBranch)" == refs/tags/* ]]; then TAG="$(Build.SourceBranchName)"; else TAG="latest"; fi
+              docker buildx build \
+                --platform linux/amd64,linux/arm64 \
+                --file infra/Dockerfile \
+                --provenance=false \
+                --tag "$IMAGE:$TAG" \
+                --tag "$IMAGE:$(Build.SourceVersion)" \
+                --push .
+            displayName: build + push (Nexus)
+            env:
+              NEXUS_PASSWORD: $(NEXUS_PASSWORD)

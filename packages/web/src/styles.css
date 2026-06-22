@@ -1,0 +1,118 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/*
+ * Chaos Console — design tokens (DESIGN.md).
+ * OKLCH throughout, warm stone neutrals (hue ~70), semantic color for STATE only.
+ * Never #fff / #000. These vars are the single source of truth; tailwind.config.js
+ * maps semantic names (bg-panel, text-ink, text-ok, ...) onto them.
+ */
+@layer base {
+  :root {
+    /* neutrals — warm stone */
+    --surface: oklch(0.985 0.003 75);
+    --panel: oklch(0.995 0.002 75);
+    --rail: oklch(0.965 0.004 70);
+    --border: oklch(0.92 0.004 70);
+    --border-strong: oklch(0.86 0.005 70);
+    --ink: oklch(0.27 0.01 70);
+    --ink-soft: oklch(0.48 0.01 70);
+    --ink-faint: oklch(0.62 0.008 70);
+
+    /* accent — indigo (interactive / selection only) */
+    --accent: oklch(0.55 0.15 264);
+    --accent-ink: oklch(0.985 0.01 264);
+    --accent-soft: oklch(0.95 0.03 264);
+
+    /* semantic status */
+    --ok: oklch(0.62 0.13 150);
+    --ok-soft: oklch(0.95 0.04 150);
+    --warn: oklch(0.74 0.14 75);
+    --warn-soft: oklch(0.96 0.05 75);
+    --bad: oklch(0.58 0.18 25);
+    --bad-soft: oklch(0.95 0.04 25);
+    --chaos: oklch(0.55 0.18 300);
+    --chaos-soft: oklch(0.95 0.05 300);
+  }
+
+  * {
+    border-color: var(--border);
+  }
+
+  html {
+    font-family:
+      ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Inter, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  body {
+    margin: 0;
+    background-color: var(--surface);
+    color: var(--ink);
+    font-size: 0.875rem;
+    line-height: 1.35rem;
+  }
+
+  /* Tabular numerals for all counts/metrics. */
+  .tnum {
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* Focus: 2px accent ring, offset — applied via .focus-ring utility on interactives. */
+  :focus-visible {
+    outline: none;
+  }
+}
+
+@layer components {
+  /* Quiet stone scrollbars for dense scroll regions (drawer / tables). */
+  .scroll-quiet {
+    scrollbar-width: thin;
+    scrollbar-color: var(--border-strong) transparent;
+  }
+  .scroll-quiet::-webkit-scrollbar {
+    width: 9px;
+    height: 9px;
+  }
+  .scroll-quiet::-webkit-scrollbar-thumb {
+    background-color: var(--border-strong);
+    border-radius: 9999px;
+    border: 2px solid var(--surface);
+  }
+  .scroll-quiet::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  /* Skeleton shimmer for loading rows (no center spinners). */
+  .skeleton {
+    position: relative;
+    overflow: hidden;
+    background-color: var(--rail);
+    border-radius: 4px;
+  }
+  .skeleton::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    transform: translateX(-100%);
+    background-image: linear-gradient(
+      90deg,
+      transparent,
+      oklch(0.995 0.002 75 / 0.55),
+      transparent
+    );
+    animation: shimmer 1.4s infinite;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .skeleton::after,
+    .animate-pulse-dot,
+    .animate-drawer-in,
+    .animate-status-in,
+    .animate-fade-in {
+      animation: none !important;
+    }
+  }
+}
