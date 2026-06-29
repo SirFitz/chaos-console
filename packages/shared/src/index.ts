@@ -8,11 +8,12 @@ export interface EcsIdentifiers { cluster: string; }
 export interface EksIdentifiers {
   managerInstance: string; namespace: string; asg?: string; asgRestoreCap?: number;
   /**
-   * Path to the kubeconfig on the manager box. When set, the engine exports
-   * KUBECONFIG=<this> before each kubectl run over SSM — needed because SSM Run
-   * Command's shell has a bare environment ($HOME often unset, not /root), so a
-   * plain kubectl can't find $HOME/.kube/config and falls back to localhost:8080.
-   * Typically "/root/.kube/config". Omit (or "") to leave kubectl's own resolution.
+   * Path to the kubeconfig on the manager box. Optional — the engine ALWAYS runs
+   * each kubectl over SSM with `export HOME=/root; export KUBECONFIG=<this>` so
+   * both kubectl and the `aws eks get-token` exec plugin resolve their config.
+   * SSM Run Command runs as root in a bare shell ($HOME unset), so without this a
+   * plain kubectl can't find ~/.kube/config and falls back to localhost:8080.
+   * Defaults to "/root/.kube/config" when omitted; set this only to override.
    */
   kubeconfig?: string;
 }
@@ -126,7 +127,7 @@ export interface PlatformChaos {
 export type ChaosErrorCode =
   | "RBAC_FORBIDDEN" | "NOT_FOUND" | "IMAGE_UNREACHABLE" | "PRIVILEGED_BLOCKED"
   | "NO_INGRESS" | "NO_RUNNING_PODS" | "MANAGER_UNREACHABLE" | "NGINX_ABSENT"
-  | "OVERLAY_FAILED" | "UNKNOWN";
+  | "OVERLAY_FAILED" | "KUBECONFIG_MISSING" | "UNKNOWN";
 
 /** Readiness of the on-demand Pumba pod (image pullable + privileged permitted). */
 export interface CapabilityStatus {

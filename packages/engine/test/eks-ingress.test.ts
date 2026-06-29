@@ -40,7 +40,7 @@ describe("discoverPathTargets", () => {
   it("queries the cluster-wide ingress list as JSON", async () => {
     ssmReturns(ingressJson);
     await discoverPathTargets(p, noCreds, "charge");
-    expect(cmd()).toBe("kubectl get ingress -A -o json");
+    expect(cmd()).toContain("kubectl get ingress -A -o json");
   });
   it("throws an addressable NO_INGRESS when nothing routes to the service", async () => {
     ssmReturns(ingressJson);

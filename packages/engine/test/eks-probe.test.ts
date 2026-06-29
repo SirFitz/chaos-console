@@ -132,7 +132,7 @@ describe("eksAct net-probe-stop", () => {
   it("deletes the streaming probe pod (idempotent, fast grace)", async () => {
     ssmReturns("pod \"chaos-streamprobe-dep\" deleted");
     await eksAct(p, noCreds, "net-probe-stop", { service: "dep" });
-    expect(cmd()).toBe("kubectl delete pod chaos-streamprobe-dep -n ns1 --ignore-not-found --grace-period=1");
+    expect(cmd()).toContain("kubectl delete pod chaos-streamprobe-dep -n ns1 --ignore-not-found --grace-period=1");
   });
 
   it("dry-run returns a plan and makes no SSM calls", async () => {

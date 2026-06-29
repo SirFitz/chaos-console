@@ -5,15 +5,39 @@ import type { PlatformConfig, ServiceStatus, EksIdentifiers, ActionName, ActionO
 import type { CredFactory } from "./ecs.js";
 import { ChaosError, classifyKubectlError } from "../errors.js";
 
+/**
+ * Wrap a kubectl command for execution over SSM Run Command on the manager box.
+ *
+ * SSM Run Command runs as root but in a bare, non-login shell: $HOME is unset
+ * (not /root). So a plain `kubectl` can't resolve ~/.kube/config — and the
+ * `aws eks get-token` exec-credential plugin that EKS kubeconfigs use can't find
+ * ~/.aws — and kubectl falls back to its localhost:8080 default ("connection
+ * refused"). We therefore ALWAYS, before running the command:
+ *   1. export HOME=/root (SSM runs as root) and KUBECONFIG (default
+ *      /root/.kube/config, overridable via identifiers.kubeconfig), so that both
+ *      kubectl and the aws exec plugin resolve their config.
+ *   2. on failure, emit a CHAOS_DIAG block to stderr — exit code, HOME,
+ *      KUBECONFIG, whether that file is readable, a listing of its directory, and
+ *      kubectl/aws tool paths. The manager box isn't directly reachable, so this
+ *      is the only way to see ground truth; it surfaces in the addressable error
+ *      and the container logs without anyone shelling into the box.
+ */
+export function buildManagerCommand(eks: EksIdentifiers, kcmd: string): string {
+  const kubeconfig = eks.kubeconfig && eks.kubeconfig.trim() ? eks.kubeconfig : "/root/.kube/config";
+  const setup = `export HOME=/root; export KUBECONFIG=${kubeconfig};`;
+  const diag =
+    `rc=$?; ` +
+    `{ echo "CHAOS_DIAG rc=$rc HOME=$HOME KUBECONFIG=$KUBECONFIG readable=$([ -r "$KUBECONFIG" ] && echo yes || echo no)"; ` +
+    `ls -la "$(dirname "$KUBECONFIG")" 2>&1; ` +
+    `for t in kubectl aws; do echo "CHAOS_DIAG $t=$(command -v "$t" 2>/dev/null || echo MISSING)"; done; ` +
+    `} 1>&2; exit $rc`;
+  return `${setup} { ${kcmd}; } || { ${diag}; }`;
+}
+
 export async function runKubectl(p: PlatformConfig, creds: CredFactory, kcmd: string, timeoutMs = 60_000): Promise<string> {
   const eks = p.identifiers as EksIdentifiers;
   const inst = eks.managerInstance;
-  // SSM Run Command runs as root but with a bare, non-login environment — $HOME is
-  // typically unset (not /root), so a plain `kubectl` can't resolve $HOME/.kube/config
-  // and falls back to the localhost:8080 default ("connection refused"). When a
-  // kubeconfig path is configured, export KUBECONFIG so every kubectl in the command
-  // finds the manager's config regardless of $HOME.
-  const command = eks.kubeconfig ? `export KUBECONFIG=${eks.kubeconfig}; ${kcmd}` : kcmd;
+  const command = buildManagerCommand(eks, kcmd);
   const client = new SSMClient({ region: p.region, credentials: creds(p) });
   const sent = await client.send(new SendCommandCommand({
     InstanceIds: [inst], DocumentName: "AWS-RunShellScript", Comment: "chaos-console",

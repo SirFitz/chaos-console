@@ -2,7 +2,7 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { mockClient } from "aws-sdk-client-mock";
 import { SSMClient, SendCommandCommand, GetCommandInvocationCommand } from "@aws-sdk/client-ssm";
-import { eksAct, runKubectl } from "../src/handlers/eks.js";
+import { eksAct, runKubectl, buildManagerCommand } from "../src/handlers/eks.js";
 
 const ssm = mockClient(SSMClient);
 beforeEach(() => ssm.reset());
@@ -11,6 +11,9 @@ const okSsm = () => {
   ssm.on(GetCommandInvocationCommand).resolves({ Status: "Success", StandardOutputContent: "PUMBA_READY", StandardErrorContent: "" });
 };
 const cmd = () => (ssm.commandCalls(SendCommandCommand)[0].args[0].input as { Parameters?: { commands?: string[] } }).Parameters!.commands![0];
+// The engine wraps every kubectl in an SSM env prologue (export HOME/KUBECONFIG) +
+// on-failure diagnostics, so extract the embedded manifest by regex, not position.
+const manifest = (c: string = cmd()) => Buffer.from(c.match(/echo (\S+) \|/)![1], "base64").toString("utf8");
 const p: any = { id: "api", layer: "API", kind: "eks_ssm", region: "us-east-1", creds: { mode: "default" },
   identifiers: { managerInstance: "i-1", namespace: "ns1" }, restore: 2 };
 const pPumba: any = { ...p, chaosBackend: "pumba" };
@@ -21,9 +24,8 @@ describe("eksAct net-* (chaos-mesh default)", () => {
     okSsm();
     await eksAct(p, noCreds, "net-loss", { service: "dep", loss: 50 });
     const c = cmd();
-    expect(c.startsWith("echo ")).toBe(true);
-    expect(c.endsWith("| base64 -d | kubectl apply -f -")).toBe(true);
-    const m = Buffer.from(c.split(" ")[1], "base64").toString("utf8");
+    expect(c).toMatch(/echo \S+ \| base64 -d \| kubectl apply -f -/);
+    const m = manifest(c);
     expect(m).toContain("kind: NetworkChaos");
     expect(m).toContain("name: chaos-nc-dep");
     expect(m).toContain("namespace: ns1");
@@ -37,14 +39,14 @@ describe("eksAct net-* (chaos-mesh default)", () => {
   it("net-partition forces loss 100", async () => {
     okSsm();
     await eksAct(p, noCreds, "net-partition", { service: "dep" });
-    const m = Buffer.from(cmd().split(" ")[1], "base64").toString("utf8");
+    const m = manifest();
     expect(m).toContain("action: loss");
     expect(m).toContain('loss: "100"');
   });
   it("net-delay emits latency/jitter with the requested delay and direction", async () => {
     okSsm();
     await eksAct(p, noCreds, "net-delay", { service: "dep", delay: "300ms", direction: "both" });
-    const m = Buffer.from(cmd().split(" ")[1], "base64").toString("utf8");
+    const m = manifest();
     expect(m).toContain("action: delay");
     expect(m).toContain('latency: "300ms"');
     expect(m).toContain('jitter: "0ms"');
@@ -53,27 +55,27 @@ describe("eksAct net-* (chaos-mesh default)", () => {
   it("net-delay defaults latency to 200ms", async () => {
     okSsm();
     await eksAct(p, noCreds, "net-delay", { service: "dep" });
-    expect(Buffer.from(cmd().split(" ")[1], "base64").toString("utf8")).toContain('latency: "200ms"');
+    expect(manifest()).toContain('latency: "200ms"');
   });
   it("duration adds a quoted spec.duration", async () => {
     okSsm();
     await eksAct(p, noCreds, "net-loss", { service: "dep", duration: "5m" });
-    expect(Buffer.from(cmd().split(" ")[1], "base64").toString("utf8")).toContain('duration: "5m"');
+    expect(manifest()).toContain('duration: "5m"');
   });
   it("custom chaosLabel overrides the selector key", async () => {
     okSsm();
     await eksAct({ ...p, chaosLabel: "k8s-app" }, noCreds, "net-loss", { service: "dep" });
-    expect(Buffer.from(cmd().split(" ")[1], "base64").toString("utf8")).toContain("k8s-app: dep");
+    expect(manifest()).toContain("k8s-app: dep");
   });
   it("net-clear deletes the NetworkChaos object and any L7 path overlay", async () => {
     okSsm();
     await eksAct(p, noCreds, "net-clear", { service: "dep" });
-    expect(cmd()).toBe("kubectl delete networkchaos chaos-nc-dep -n ns1 --ignore-not-found; kubectl delete ingress,service,deployment -n ns1 -l chaos-overlay=path,chaos-service=dep --ignore-not-found");
+    expect(cmd()).toContain("kubectl delete networkchaos chaos-nc-dep -n ns1 --ignore-not-found; kubectl delete ingress,service,deployment -n ns1 -l chaos-overlay=path,chaos-service=dep --ignore-not-found");
   });
   it("net-status lists NetworkChaos plus any L7 path overlays", async () => {
     okSsm();
     await eksAct(p, noCreds, "net-status", {});
-    expect(cmd()).toBe("kubectl get networkchaos -n ns1; echo '---CHAOS-PATHS---'; kubectl get ingress -n ns1 -l chaos-overlay=path --no-headers 2>/dev/null");
+    expect(cmd()).toContain("kubectl get networkchaos -n ns1; echo '---CHAOS-PATHS---'; kubectl get ingress -n ns1 -l chaos-overlay=path --no-headers 2>/dev/null");
   });
   it("dry-run returns the manifest plan and makes no SSM calls", async () => {
     const r = await eksAct(p, noCreds, "net-loss", { service: "dep", dryRun: true });
@@ -121,12 +123,12 @@ describe("eksAct net-* (pumba backend)", () => {
   it("net-clear deletes the pumba pod with a grace period and any L7 path overlay", async () => {
     okSsm();
     await eksAct(pPumba, noCreds, "net-clear", { service: "dep" });
-    expect(cmd()).toBe("kubectl delete pod chaos-pumba-dep -n ns1 --ignore-not-found --grace-period=25; kubectl delete ingress,service,deployment -n ns1 -l chaos-overlay=path,chaos-service=dep --ignore-not-found");
+    expect(cmd()).toContain("kubectl delete pod chaos-pumba-dep -n ns1 --ignore-not-found --grace-period=25; kubectl delete ingress,service,deployment -n ns1 -l chaos-overlay=path,chaos-service=dep --ignore-not-found");
   });
   it("net-status lists pumba pods plus any L7 path overlays", async () => {
     okSsm();
     await eksAct(pPumba, noCreds, "net-status", {});
-    expect(cmd()).toBe("kubectl get pods -n ns1 -l chaos-backend=pumba; echo '---CHAOS-PATHS---'; kubectl get ingress -n ns1 -l chaos-overlay=path --no-headers 2>/dev/null");
+    expect(cmd()).toContain("kubectl get pods -n ns1 -l chaos-backend=pumba; echo '---CHAOS-PATHS---'; kubectl get ingress -n ns1 -l chaos-overlay=path --no-headers 2>/dev/null");
   });
 });
 
@@ -140,16 +142,29 @@ describe("eksAct net-* validation", () => {
   });
 });
 
-describe("runKubectl KUBECONFIG", () => {
-  it("exports KUBECONFIG before the command when configured (SSM shell lacks HOME)", async () => {
-    okSsm();
-    const pk = { ...p, identifiers: { ...p.identifiers, kubeconfig: "/root/.kube/config" } };
-    await runKubectl(pk, noCreds, "kubectl get nodes");
-    expect(cmd()).toBe("export KUBECONFIG=/root/.kube/config; kubectl get nodes");
+describe("buildManagerCommand (SSM env + diagnostics)", () => {
+  it("always exports HOME=/root and KUBECONFIG (default /root/.kube/config) before the command", () => {
+    const c = buildManagerCommand({ managerInstance: "i-1", namespace: "ns1" } as any, "kubectl get nodes");
+    expect(c.startsWith("export HOME=/root; export KUBECONFIG=/root/.kube/config;")).toBe(true);
+    expect(c).toContain("{ kubectl get nodes; }");
   });
-  it("sends the bare command when no kubeconfig is configured", async () => {
+  it("honors a configured kubeconfig override", () => {
+    const c = buildManagerCommand({ managerInstance: "i-1", namespace: "ns1", kubeconfig: "/home/ec2-user/.kube/config" } as any, "kubectl get nodes");
+    expect(c).toContain("export KUBECONFIG=/home/ec2-user/.kube/config;");
+  });
+  it("falls back to the default when kubeconfig is blank", () => {
+    const c = buildManagerCommand({ managerInstance: "i-1", namespace: "ns1", kubeconfig: "  " } as any, "kubectl get nodes");
+    expect(c).toContain("export KUBECONFIG=/root/.kube/config;");
+  });
+  it("emits a CHAOS_DIAG block on failure and preserves the kubectl exit code", () => {
+    const c = buildManagerCommand({ managerInstance: "i-1", namespace: "ns1" } as any, "kubectl get nodes");
+    expect(c).toContain("|| {");
+    expect(c).toContain("CHAOS_DIAG");
+    expect(c).toContain("exit $rc");
+  });
+  it("runKubectl sends exactly the wrapped command over SSM", async () => {
     okSsm();
     await runKubectl(p, noCreds, "kubectl get nodes");
-    expect(cmd()).toBe("kubectl get nodes");
+    expect(cmd()).toEqual(buildManagerCommand(p.identifiers, "kubectl get nodes"));
   });
 });

@@ -39,6 +39,14 @@ export function classifyKubectlError(err: unknown): ClassifiedError {
   const s = raw.toLowerCase();
   const at = (...needles: string[]) => needles.some((n) => s.includes(n));
 
+  // kubectl fell back to its localhost:8080 default — SSM delivered the command and
+  // it RAN, but kubectl found no usable kubeconfig. Must precede the SSM/manager
+  // check below, because the wrapper text ("SSM status Failed: ...") contains "ssm".
+  if (at("localhost:8080", "current server api group list"))
+    return { code: "KUBECONFIG_MISSING", raw,
+      message: "kubectl on the manager box has no usable kubeconfig — it fell back to localhost:8080 (connection refused).",
+      remediation: "SSM runs kubectl as root in a bare shell (no $HOME). Ensure the manager's kubeconfig exists and is readable by root (default /root/.kube/config); the engine exports HOME=/root and KUBECONFIG before each kubectl. See the CHAOS_DIAG lines in the output for the path, readability, and a directory listing." };
+
   if (at("invocationdoesnotexist", "not in a valid state", "ssm", "sendcommand", "instanceid", "no instances"))
     return { code: "MANAGER_UNREACHABLE", raw,
       message: "The chaos manager could not be reached over SSM.",
