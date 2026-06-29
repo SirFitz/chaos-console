@@ -5,7 +5,17 @@ export type CredMode = "assumeRole" | "profile" | "default";
 
 export interface CredConfig { mode: CredMode; roleArn?: string; profile?: string; externalId?: string; }
 export interface EcsIdentifiers { cluster: string; }
-export interface EksIdentifiers { managerInstance: string; namespace: string; asg?: string; asgRestoreCap?: number; }
+export interface EksIdentifiers {
+  managerInstance: string; namespace: string; asg?: string; asgRestoreCap?: number;
+  /**
+   * Path to the kubeconfig on the manager box. When set, the engine exports
+   * KUBECONFIG=<this> before each kubectl run over SSM — needed because SSM Run
+   * Command's shell has a bare environment ($HOME often unset, not /root), so a
+   * plain kubectl can't find $HOME/.kube/config and falls back to localhost:8080.
+   * Typically "/root/.kube/config". Omit (or "") to leave kubectl's own resolution.
+   */
+  kubeconfig?: string;
+}
 export interface PlatformConfig {
   id: string; layer: Layer; kind: Kind; region: string; creds: CredConfig;
   identifiers: EcsIdentifiers | EksIdentifiers; restore?: number;

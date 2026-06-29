@@ -6,11 +6,18 @@ import type { CredFactory } from "./ecs.js";
 import { ChaosError, classifyKubectlError } from "../errors.js";
 
 export async function runKubectl(p: PlatformConfig, creds: CredFactory, kcmd: string, timeoutMs = 60_000): Promise<string> {
-  const inst = (p.identifiers as EksIdentifiers).managerInstance;
+  const eks = p.identifiers as EksIdentifiers;
+  const inst = eks.managerInstance;
+  // SSM Run Command runs as root but with a bare, non-login environment — $HOME is
+  // typically unset (not /root), so a plain `kubectl` can't resolve $HOME/.kube/config
+  // and falls back to the localhost:8080 default ("connection refused"). When a
+  // kubeconfig path is configured, export KUBECONFIG so every kubectl in the command
+  // finds the manager's config regardless of $HOME.
+  const command = eks.kubeconfig ? `export KUBECONFIG=${eks.kubeconfig}; ${kcmd}` : kcmd;
   const client = new SSMClient({ region: p.region, credentials: creds(p) });
   const sent = await client.send(new SendCommandCommand({
     InstanceIds: [inst], DocumentName: "AWS-RunShellScript", Comment: "chaos-console",
-    Parameters: { commands: [kcmd] } }));
+    Parameters: { commands: [command] } }));
   const id = sent.Command?.CommandId;
   if (!id) throw new Error("SSM SendCommand returned no CommandId");
   const deadline = Date.now() + timeoutMs;

@@ -2,7 +2,7 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { mockClient } from "aws-sdk-client-mock";
 import { SSMClient, SendCommandCommand, GetCommandInvocationCommand } from "@aws-sdk/client-ssm";
-import { eksAct } from "../src/handlers/eks.js";
+import { eksAct, runKubectl } from "../src/handlers/eks.js";
 
 const ssm = mockClient(SSMClient);
 beforeEach(() => ssm.reset());
@@ -137,5 +137,19 @@ describe("eksAct net-* validation", () => {
   it("an unknown chaos backend is rejected", async () => {
     await expect(eksAct({ ...p, chaosBackend: "bogus" } as any, noCreds, "net-loss", { service: "dep" }))
       .rejects.toThrow(/unknown chaos backend/i);
+  });
+});
+
+describe("runKubectl KUBECONFIG", () => {
+  it("exports KUBECONFIG before the command when configured (SSM shell lacks HOME)", async () => {
+    okSsm();
+    const pk = { ...p, identifiers: { ...p.identifiers, kubeconfig: "/root/.kube/config" } };
+    await runKubectl(pk, noCreds, "kubectl get nodes");
+    expect(cmd()).toBe("export KUBECONFIG=/root/.kube/config; kubectl get nodes");
+  });
+  it("sends the bare command when no kubeconfig is configured", async () => {
+    okSsm();
+    await runKubectl(p, noCreds, "kubectl get nodes");
+    expect(cmd()).toBe("kubectl get nodes");
   });
 });

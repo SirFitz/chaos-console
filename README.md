@@ -30,14 +30,14 @@ pnpm install
 
 Config lives in `./config` (override with `CHAOS_CONFIG_DIR`). The published Docker image ships **environment-agnostic** — no config is baked in; it's mounted at runtime (see [`infra/DEVOPS-IMAGE.md`](infra/DEVOPS-IMAGE.md)). Annotated templates ship as `*.example.json`; copy each to its real name (kept out of source control) and fill it in:
 
-- `config/platforms.json` — the platforms to control (template: [`config/platforms.example.json`](config/platforms.example.json)). Each entry sets a `kind` (`ecs` | `eks_ssm`), a `region`, a credential mode, identifiers (ECS cluster, or EKS manager instance + namespace + ASG), and optional `chaosBackend` (`chaos-mesh` | `pumba`).
+- `config/platforms.json` — the platforms to control (template: [`config/platforms.example.json`](config/platforms.example.json)). Each entry sets a `kind` (`ecs` | `eks_ssm`), a `region`, a credential mode, identifiers (ECS cluster, or EKS manager instance + namespace + ASG), and optional `chaosBackend` (`chaos-mesh` | `pumba`). For `eks_ssm`, set `identifiers.kubeconfig` (typically `/root/.kube/config`) so the engine exports `KUBECONFIG` before each `kubectl` over SSM — SSM Run Command runs with no `$HOME`, so without it `kubectl` can't find the manager's kubeconfig and falls back to `localhost:8080`.
 - `config/catalog.json` — static grouping/flow metadata used to label live services (template: [`config/catalog.example.json`](config/catalog.example.json)); services not found in any group are reported as `Unmapped`.
 - `config/users.json` — local users (**not committed**). Create it from the example:
 
 ```bash
 cp config/users.example.json config/users.json
-# replace each REPLACE_WITH_BCRYPT_HASH:
-node -e "console.log(require('bcryptjs').hashSync('PASSWORD',10))"
+# replace each REPLACE_WITH_BCRYPT_HASH (run through @chaos/server, which owns bcryptjs):
+pnpm --filter @chaos/server exec node -e "console.log(require('bcryptjs').hashSync('PASSWORD',10))"
 ```
 
 Each user has a `role` of `viewer` or `operator`. Read routes require any authenticated user; mutation and packet-chaos routes require `operator`.

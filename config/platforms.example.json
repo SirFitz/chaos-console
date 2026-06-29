@@ -19,7 +19,8 @@
       "managerInstance": "<EC2_INSTANCE_ID_RUNNING_KUBECTL_VIA_SSM>",
       "namespace": "<KUBERNETES_NAMESPACE>",
       "asg": "<EKS_WORKER_ASG_NAME>",
-      "asgRestoreCap": 2
+      "asgRestoreCap": 2,
+      "kubeconfig": "/root/.kube/config"
     },
     "restore": 2,
     "chaosBackend": "pumba",
