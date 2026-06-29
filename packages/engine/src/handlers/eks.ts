@@ -1,7 +1,7 @@
 // packages/engine/src/handlers/eks.ts
 import { SSMClient, SendCommandCommand, GetCommandInvocationCommand } from "@aws-sdk/client-ssm";
 import { AutoScalingClient, UpdateAutoScalingGroupCommand } from "@aws-sdk/client-auto-scaling";
-import type { PlatformConfig, ServiceStatus, EksIdentifiers, ActionName, ActionOutcome, ActionRequest, PathTarget, CapabilityStatus, IngressStatus } from "@chaos/shared";
+import type { PlatformConfig, ServiceStatus, EksIdentifiers, ActionName, ActionOutcome, ActionRequest, PathTarget, CapabilityStatus, IngressStatus, ExecResult } from "@chaos/shared";
 import type { CredFactory } from "./ecs.js";
 import { ChaosError, classifyKubectlError } from "../errors.js";
 
@@ -58,6 +58,39 @@ export async function runKubectl(p: PlatformConfig, creds: CredFactory, kcmd: st
     if (inv?.Status && !["Pending", "InProgress", "Delayed"].includes(inv.Status)) {
       if (inv.Status !== "Success") throw new Error(`SSM status ${inv.Status}: ${inv.StandardErrorContent ?? ""}`);
       return inv.StandardOutputContent ?? "";
+    }
+    if (Date.now() > deadline) throw new Error("SSM command timed out");
+    await new Promise((r) => setTimeout(r, 1500));
+  }
+}
+
+/**
+ * Run a free-text command on the manager box over SSM and return BOTH output
+ * streams + the exit code, WITHOUT throwing on a non-zero exit (that's a normal
+ * terminal outcome). Powers the in-app SSM terminal. Unlike runKubectl this does
+ * NOT wrap the command — it runs exactly what was typed, so the operator sees the
+ * box's true bare-shell state ($HOME unset, etc.). Only infrastructure failures
+ * (no CommandId, SSM API error, timeout) throw.
+ */
+export async function execOnManager(p: PlatformConfig, creds: CredFactory, command: string, timeoutMs = 60_000): Promise<ExecResult> {
+  const inst = (p.identifiers as EksIdentifiers).managerInstance;
+  const client = new SSMClient({ region: p.region, credentials: creds(p) });
+  const sent = await client.send(new SendCommandCommand({
+    InstanceIds: [inst], DocumentName: "AWS-RunShellScript", Comment: "chaos-console-terminal",
+    Parameters: { commands: [command] } }));
+  const id = sent.Command?.CommandId;
+  if (!id) throw new Error("SSM SendCommand returned no CommandId");
+  const deadline = Date.now() + timeoutMs;
+  for (;;) {
+    let inv;
+    try {
+      inv = await client.send(new GetCommandInvocationCommand({ CommandId: id, InstanceId: inst }));
+    } catch (e) {
+      if ((e as { name?: string })?.name !== "InvocationDoesNotExist") throw e;
+    }
+    if (inv?.Status && !["Pending", "InProgress", "Delayed"].includes(inv.Status)) {
+      return { command, stdout: inv.StandardOutputContent ?? "", stderr: inv.StandardErrorContent ?? "",
+        exit: inv.ResponseCode ?? null, status: inv.Status };
     }
     if (Date.now() > deadline) throw new Error("SSM command timed out");
     await new Promise((r) => setTimeout(r, 1500));

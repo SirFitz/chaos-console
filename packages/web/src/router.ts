@@ -1,8 +1,8 @@
 import { useEffect, useState, useCallback } from "react";
 
-/** The three top-level nav tabs (drive the sidebar + top-bar title). */
-export type Route = "inventory" | "chaos" | "audit";
-const ROUTES: Route[] = ["inventory", "chaos", "audit"];
+/** The top-level nav tabs (drive the sidebar + top-bar title). */
+export type Route = "inventory" | "chaos" | "audit" | "terminal";
+const ROUTES: Route[] = ["inventory", "chaos", "audit", "terminal"];
 
 /**
  * The parsed hash location. Either one of the three nav tabs, or a per-service

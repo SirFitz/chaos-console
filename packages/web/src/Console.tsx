@@ -12,6 +12,7 @@ import { TopBar } from "./components/TopBar.js";
 import { Inventory } from "./pages/Inventory.js";
 import { ActiveChaos } from "./pages/ActiveChaos.js";
 import { AuditView } from "./pages/AuditView.js";
+import { Terminal } from "./pages/Terminal.js";
 import { ServiceDetail } from "./pages/ServiceDetail.js";
 import { ChaosDrawer } from "./components/ChaosDrawer.js";
 
@@ -19,6 +20,7 @@ const TITLES: Record<Route, string> = {
   inventory: "Inventory",
   chaos: "Active chaos",
   audit: "Audit",
+  terminal: "Terminal",
 };
 
 export function Console({
@@ -126,6 +128,7 @@ export function Console({
                 )}
                 {route === "chaos" && <ActiveChaos role={user.role} />}
                 {route === "audit" && <AuditView />}
+                {route === "terminal" && <Terminal role={user.role} />}
               </>
             )}
           </main>

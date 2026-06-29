@@ -88,6 +88,20 @@ export interface ActionOutcome {
 }
 
 /**
+ * Result of running one free-text command on a platform's manager box over SSM
+ * (the in-app terminal). `exit` is the command's own exit code (SSM ResponseCode);
+ * `status` is SSM's invocation status ("Success" | "Failed" | …). A non-zero exit
+ * is a normal terminal outcome, not an engine error — both streams are returned.
+ */
+export interface ExecResult {
+  command: string;
+  stdout: string;
+  stderr: string;
+  exit: number | null;
+  status: string;
+}
+
+/**
  * One injected network fault, parsed from a platform's net-status into plain
  * language so the UI is dumb. `raw` keeps the unparsed result for the Details
  * disclosure (DESIGN.md: sentence first, raw behind a fold).

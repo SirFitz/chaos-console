@@ -1,8 +1,8 @@
 // packages/engine/src/engine.ts
-import type { PlatformConfig, ServiceStatus, EcsIdentifiers, EksIdentifiers, ActionName, ActionOutcome, ActionRequest } from "@chaos/shared";
+import type { PlatformConfig, ServiceStatus, EcsIdentifiers, EksIdentifiers, ActionName, ActionOutcome, ActionRequest, ExecResult } from "@chaos/shared";
 import { resolveCredentials } from "./credentials.js";
 import { ecsStatus, ecsAct, type CredFactory } from "./handlers/ecs.js";
-import { eksStatus, eksAct } from "./handlers/eks.js";
+import { eksStatus, eksAct, execOnManager } from "./handlers/eks.js";
 
 const NAME_RE = /^[a-zA-Z0-9][a-zA-Z0-9._-]*$/;
 
@@ -33,6 +33,12 @@ export class Engine {
     if (p.kind === "ecs" && eksOnly.includes(action)) throw new Error(`action '${action}' is not supported for ecs platform '${id}' (eks-only packet chaos)`);
     if (p.kind === "eks_ssm" && ecsOnly.includes(action)) throw new Error(`action '${action}' is not supported for eks platform '${id}' (use net-loss/net-partition instead)`);
     return p.kind === "ecs" ? ecsAct(p, this.creds, action, req) : eksAct(p, this.creds, action, req);
+  }
+  /** Run a free-text command on an eks_ssm platform's manager box over SSM (the terminal). */
+  async exec(id: string, command: string, timeoutMs = 60_000): Promise<ExecResult> {
+    const p = this.get(id);
+    if (p.kind !== "eks_ssm") throw new Error(`platform '${id}' has no manager box (terminal is for eks_ssm platforms)`);
+    return execOnManager(p, this.creds, command, timeoutMs);
   }
   platformIds(): string[] {
     return this.platforms.map((p) => p.id);

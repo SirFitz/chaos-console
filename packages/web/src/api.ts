@@ -4,6 +4,7 @@ import type {
   ActionRequest,
   AuditRecord,
   CapabilityStatus,
+  ExecResult,
   IngressStatus,
   Kind,
   PlatformChaos,
@@ -136,4 +137,12 @@ export async function audit(query: AuditQuery = {}): Promise<AuditRecord[]> {
   if (query.limit !== undefined) qs.set("limit", String(query.limit));
   const suffix = qs.toString();
   return (await request<AuditRecord[]>(`/api/audit${suffix ? `?${suffix}` : ""}`)).data;
+}
+/** Run a free-text command on a platform's manager box over SSM (the terminal). */
+export async function execCommand(
+  id: string,
+  command: string,
+): Promise<{ result: ExecResult; auditId: string | null }> {
+  const r = await request<ExecResult>(`/api/platforms/${encodeURIComponent(id)}/exec`, jsonBody({ command }));
+  return { result: r.data, auditId: r.auditId };
 }

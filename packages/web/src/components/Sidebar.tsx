@@ -49,6 +49,8 @@ export function Sidebar({
     { route: "inventory", label: "Inventory" },
     { route: "chaos", label: "Active chaos", badge: chaosCount ?? undefined },
     { route: "audit", label: "Audit" },
+    // The terminal runs commands as root on the manager box — operators only.
+    ...(role === "operator" ? [{ route: "terminal" as const, label: "Terminal" }] : []),
   ];
 
   const go = (r: Route) => {

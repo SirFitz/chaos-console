@@ -117,6 +117,37 @@ export function buildServer(deps: Deps) {
         return reply.code(502).send(fail(c.code, c.remediation ? `${c.message} ${c.remediation}` : c.message));
       }
     });
+    // Free-text command runner on an eks_ssm platform's manager box (the in-app SSM
+    // terminal). Operator-only and AUDITED — it runs arbitrary shell as root on the
+    // box over the same SSM SendCommand path the engine already uses, so every command
+    // + outcome is recorded. The command runs RAW (no env wrapping), so the operator
+    // sees the box's true state. A non-zero exit is a normal result, not an error;
+    // only infrastructure failures (SSM unreachable, timeout) 502.
+    api.post<{ Params: { id: string }; Body: { command?: string } }>(
+      "/api/platforms/:id/exec",
+      { preHandler: requireRole("operator") },
+      async (req, reply) => {
+        const { id } = req.params;
+        const plat = engine.listPlatforms().find((p) => p.id === id);
+        if (!plat) return reply.code(404).send(fail("NOT_FOUND", `unknown platform '${id}'`));
+        if (plat.kind !== "eks_ssm")
+          return reply.code(400).send(fail("NO_MANAGER", `platform '${id}' has no manager box (terminal is for eks_ssm platforms)`));
+        const command = String((req.body as { command?: string } | undefined)?.command ?? "").trim();
+        if (!command) return reply.code(400).send(fail("BAD_REQUEST", "command is required"));
+        if (command.length > 4000) return reply.code(400).send(fail("BAD_REQUEST", "command too long (max 4000 chars)"));
+        const sess = req.session ?? { username: "unknown", role: "operator" as const };
+        const base = { user: sess.username, role: sess.role, platform: id, action: "exec", target: null,
+          params: { command }, dryRun: false, confirm: false, awsIdentity: safeDescribe(engine, id) };
+        try {
+          const result = await engine.exec(id, command);
+          const rec = deps.audit.record({ ...base, result: "success" });
+          return reply.send(ok(result, rec.id));
+        } catch (e) {
+          const msg = (e as Error).message;
+          const rec = deps.audit.record({ ...base, result: "error", error: msg });
+          return reply.code(502).send(fail("EXEC_FAILED", msg, rec.id));
+        }
+      });
     app.__engine = engine; app.__catalog = deps.catalog; app.__requireRole = requireRole;
   });
 
