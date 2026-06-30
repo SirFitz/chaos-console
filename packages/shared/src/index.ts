@@ -25,6 +25,8 @@ export interface PlatformConfig {
   chaosImage?: string; chaosNetToolsImage?: string;
   /** Image for the L7 path-cut 503 sink (must be nginx-compatible; override for a registry mirror). Default nginx:alpine. */
   chaosSinkImage?: string;
+  /** Image for the latency/loss probe pods (net-verify + the per-service chart's streaming probe) — a tiny busybox for `ping`. Override to a registry mirror when docker.io is blocked, or the chart shows no traffic. Default busybox:1.36. */
+  chaosProbeImage?: string;
 }
 export interface ServiceStatus {
   platformId: string; layer: Layer; name: string;

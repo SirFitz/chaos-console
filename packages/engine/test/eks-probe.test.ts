@@ -26,6 +26,11 @@ const ecsP: any = { id: "mi", layer: "MI", kind: "ecs", region: "us-east-1", cre
 const noCreds = () => undefined as any;
 
 describe("eksAct net-probe-start", () => {
+  it("honors a chaosProbeImage override (registry mirror when docker.io is blocked)", async () => {
+    ssmReturns("PROBE_STARTED IP=10.20.2.114");
+    await eksAct({ ...p, chaosProbeImage: "jfrog.corp/busybox:1.36" }, noCreds, "net-probe-start", { service: "dep" });
+    expect(cmd()).toContain("--image=jfrog.corp/busybox:1.36 --restart=Never");
+  });
   it("idempotently launches one continuous ping pod that prints one JSON line/sec", async () => {
     ssmReturns("PROBE_STARTED IP=10.20.2.114");
     const r = await eksAct(p, noCreds, "net-probe-start", { service: "dep" });

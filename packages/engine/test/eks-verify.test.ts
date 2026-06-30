@@ -29,6 +29,11 @@ PING 10.20.2.114 (10.20.2.114): 56 data bytes
 round-trip min/avg/max = 0.512/205.137/640.201 ms`;
 
 describe("eksAct net-verify (probe)", () => {
+  it("honors a chaosProbeImage override (registry mirror when docker.io is blocked)", async () => {
+    ssmReturns(BUSYBOX_OK);
+    await eksAct({ ...p, chaosProbeImage: "jfrog.corp/busybox:1.36" }, noCreds, "net-verify", { service: "dep" });
+    expect(cmd()).toContain("--image=jfrog.corp/busybox:1.36 --restart=Never");
+  });
   it("issues one idempotent shell command: delete prior probe, resolve a Running pod IP, run busybox ping", async () => {
     ssmReturns(BUSYBOX_OK);
     await eksAct(p, noCreds, "net-verify", { service: "dep" });

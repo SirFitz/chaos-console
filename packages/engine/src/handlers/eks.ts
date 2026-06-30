@@ -334,6 +334,8 @@ const pumbaImage = (p: PlatformConfig) => p.chaosImage ?? "ghcr.io/alexei-led/pu
 const pumbaNetToolsImage = (p: PlatformConfig) => p.chaosNetToolsImage ?? "ghcr.io/alexei-led/pumba-alpine-nettools:latest";
 /** Image for the L7 path 503 sink (must be nginx-compatible; override for a mirror). */
 const chaosSinkImage = (p: PlatformConfig) => p.chaosSinkImage ?? "nginx:alpine";
+/** Image for the latency/loss probe pods (net-verify + the streaming chart probe) — a tiny busybox for `ping`. Override for a registry mirror when docker.io is blocked. */
+const probeImage = (p: PlatformConfig) => p.chaosProbeImage ?? "busybox:1.36";
 
 // 1:1 port of emit_networkchaos(): Chaos Mesh NetworkChaos manifest.
 function emitNetworkChaos(p: PlatformConfig, svc: string, kind: "loss" | "delay", req: ActionRequest): string {
@@ -517,7 +519,7 @@ function buildVerifyCommand(p: PlatformConfig, svc: string): string {
     `if [ -z "$IP" ]; then echo NO_TARGET; exit 0; fi`,
     // 4. run the probe (no --rm: we drive wait/logs/delete ourselves, which is
     //    robust over SSM where --attach --rm streaming can be flaky).
-    `kubectl run ${pod} -n ${ns} --image=busybox:1.36 --restart=Never --quiet --command -- ping -c ${PROBE_PINGS} -W 1 "$IP" >/dev/null 2>&1`,
+    `kubectl run ${pod} -n ${ns} --image=${probeImage(p)} --restart=Never --quiet --command -- ping -c ${PROBE_PINGS} -W 1 "$IP" >/dev/null 2>&1`,
     // 5. wait for it to finish (bounded), then print its output for parsing.
     `kubectl wait --for=jsonpath='{.status.phase}'=Succeeded pod/${pod} -n ${ns} --timeout=40s >/dev/null 2>&1`,
     `echo "TARGET_IP=$IP"`,
@@ -609,7 +611,7 @@ function buildProbeStartCommand(p: PlatformConfig, svc: string): string {
     `if [ -z "$IP" ]; then echo NO_TARGET; exit 0; fi`,
     // 4. launch the long-lived probe; the resolved IP is passed as $1 to the loop,
     //    which pings it once/sec and prints one JSON line/sec to stdout.
-    `kubectl run ${pod} -n ${ns} --image=busybox:1.36 --restart=Never --quiet ` +
+    `kubectl run ${pod} -n ${ns} --image=${probeImage(p)} --restart=Never --quiet ` +
       `--command -- sh -c '${podScript}' _ "$IP" >/dev/null 2>&1`,
     `echo "PROBE_STARTED IP=$IP"`,
   ].join("; ");
