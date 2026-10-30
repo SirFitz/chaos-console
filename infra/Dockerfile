@@ -2,15 +2,15 @@
 
 ###############################################################################
 # Chaos Console — multi-stage image
-#   builder : Node 20 + corepack pnpm 9, full workspace install + build
-#   runtime : slim glibc Node 20 (better-sqlite3 is a native addon), non-root,
+#   builder : Node 24 + corepack pnpm 9, full workspace install + build
+#   runtime : slim glibc Node 24 (better-sqlite3 is a native addon), non-root,
 #             runs the Fastify server which also serves packages/web/dist.
 # Build (from repo root):  docker build -f infra/Dockerfile -t chaos-console:dev .
 # NO AWS keys are baked in — credentials come from the task role / mounted profile.
 ###############################################################################
 
 # ---------- builder ----------
-FROM node:20-slim AS builder
+FROM node:24-slim AS builder
 ENV PNPM_HOME="/pnpm" \
     PATH="/pnpm:$PATH" \
     CI="true"
@@ -38,7 +38,7 @@ RUN pnpm -r build
 RUN pnpm -r --prod install --frozen-lockfile
 
 # ---------- runtime ----------
-FROM node:20-slim AS runtime
+FROM node:24-slim AS runtime
 ENV NODE_ENV=production \
     NODE_OPTIONS=--conditions=production \
     PORT=8080 \

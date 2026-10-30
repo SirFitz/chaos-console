@@ -51,7 +51,7 @@ docker build -f infra/Dockerfile -t chaos-console:dev .
 ```
 
 The build runs `pnpm install --frozen-lockfile` → `pnpm -r build` → prod-prune, then a
-slim `node:20-slim` runtime starts the Fastify server (which serves the SPA from
+slim `node:24-slim` runtime starts the Fastify server (which serves the SPA from
 `packages/web/dist`) as the non-root `chaos` user. Health: `GET /healthz`.
 
 ## 3. Provision the runtime (your IaC)

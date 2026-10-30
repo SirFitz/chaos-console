@@ -15,7 +15,7 @@ One TypeScript monorepo, one Docker image: a Fastify backend (engine + JSON API)
 
 ## Requirements
 
-- Node 20+
+- Node 24+
 - pnpm 9.7.0 (via corepack: `corepack enable`)
 - AWS credentials reachable per the configured credential mode (see [Credentials](#credentials)).
 
