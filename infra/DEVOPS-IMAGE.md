@@ -7,7 +7,7 @@ The production container image for the Chaos Console (Fastify API + React SPA in
 - **Artifact:** `chaos-console-0.1.7-amd64.tar.gz` (a `docker save` tarball, **linux/amd64**).
 - **Version:** `0.1.7` · **git:** `f955120` · **SHA256:** `3cba0e78ebf6b531dc241d92ecb03a2af05098cfd7d12ab0296ae65d788140fb` (also in `chaos-console-0.1.7-amd64.tar.gz.sha256`).
 - **Changelog:** `0.1.7` adds a **per-service detail page** — click a service for its live status, the action/audit timeline scoped to that service, active chaos on it, and (EKS) a **live network chart** of measured loss % + latency over time (auto-sampled from net-verify probes — watch a fault take effect). `0.1.6` added **L7 path chaos** (additive ingress-nginx canary overlay → 503 sink; never edits the real Ingress), **backend-health preflight**, **Pumba liveness-confirm**, and an **addressable-error** layer. `0.1.5` added the EKS verification probe + UX polish. `0.1.3` made the image **environment-agnostic** + full action auditing. `0.1.2` redesigned the UI. Use `0.1.7`; earlier tags are superseded.
-- Base `node:20-slim` (glibc — `better-sqlite3` is a native addon), **non-root** (uid 10001), `EXPOSE 8080`, built-in `HEALTHCHECK` on `/healthz`. No AWS keys or secrets are baked in.
+- Base `node:24-slim` (glibc — `better-sqlite3` is a native addon), **non-root** (uid 10001), `EXPOSE 8080`, built-in `HEALTHCHECK` on `/healthz`. No AWS keys or secrets are baked in.
 - Need a registry image or arm64 instead? Use the pipeline below (multi-arch), or ask and we'll push to your ECR/GHCR.
 
 ## Load it

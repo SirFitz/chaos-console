@@ -16,7 +16,7 @@ stages: [verify, image]
 
 verify:
   stage: verify
-  image: node:20-slim
+  image: node:24-slim
   before_script:
     - corepack enable && corepack prepare pnpm@9.7.0 --activate
   script:
